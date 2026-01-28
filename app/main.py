@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List
 
-from .models import SessionLocal, init_db, Article
+from .models import SessionLocal, init_db, Article, Podcast
 from .services.ingest import fetch_and_parse
+from .services.digest import generate_podcast_script
+from .services.audio import text_to_speech
 
 app = FastAPI(title="ReadCast API", version="0.1.0")
 
@@ -26,6 +28,12 @@ class ArticleResponse(BaseModel):
     title: str
     url: str
     status: str
+
+class PodcastResponse(BaseModel):
+    id: int
+    title: str
+    script: str
+    audio_path: str
 
 @app.on_event("startup")
 def on_startup():
@@ -54,7 +62,7 @@ def ingest_article(request: URLRequest, db: Session = Depends(get_db)):
         title=data["title"],
         content_clean=data["content"],
         source=request.source,
-        status="processed"
+        status="processed" # Ready for digestion
     )
     db.add(new_article)
     db.commit()
@@ -65,3 +73,40 @@ def ingest_article(request: URLRequest, db: Session = Depends(get_db)):
 @app.get("/articles", response_model=List[ArticleResponse])
 def list_articles(db: Session = Depends(get_db)):
     return db.query(Article).filter(Article.status != "archived").all()
+
+@app.post("/generate", response_model=PodcastResponse)
+async def generate_episode(db: Session = Depends(get_db)):
+    # 1. Fetch unprocessed articles
+    articles = db.query(Article).filter(Article.status == "processed").all()
+    
+    if not articles:
+        raise HTTPException(status_code=400, detail="No new articles to process!")
+        
+    # 2. Prepare data for LLM
+    article_data = [{"title": a.title, "content": a.content_clean} for a in articles]
+    
+    # 3. Generate Script (LLM)
+    script = generate_podcast_script(article_data)
+    
+    # 4. Generate Audio (TTS)
+    # Filename based on timestamp
+    import time
+    filename = f"podcast_{int(time.time())}.mp3"
+    audio_path = await text_to_speech(script, filename)
+    
+    # 5. Save Podcast Record
+    podcast = Podcast(
+        title=f"ReadCast Daily Digest - {len(articles)} Articles",
+        script=script,
+        audio_path=audio_path
+    )
+    db.add(podcast)
+    
+    # 6. Mark articles as archived/done
+    for a in articles:
+        a.status = "archived"
+        
+    db.commit()
+    db.refresh(podcast)
+    
+    return podcast
