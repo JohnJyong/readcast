@@ -1,6 +1,6 @@
 import os
 from typing import List
-from openai import OpenAI
+from anthropic import Anthropic
 from dotenv import load_dotenv
 
 # Load env vars
@@ -28,23 +28,24 @@ def generate_podcast_script(articles: List[dict]) -> str:
     # Prepare context
     context = ""
     for idx, art in enumerate(articles):
-        # Truncate content to avoid token limits (basic truncation)
-        snippet = art['content'][:3000] 
+        # Truncate content to avoid token limits (Claude can handle more, but keeping safe)
+        snippet = art['content'][:10000] 
         context += f"Article {idx+1}: {art['title']}\nContent: {snippet}\n\n"
 
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        return "System: Error - OPENAI_API_KEY not found in .env file."
+        return "System: Error - ANTHROPIC_API_KEY not found in .env file."
 
     try:
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo", # Use 3.5 for speed/cost in MVP, switch to 4 for quality
+        client = Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=2000,
+            system=SYSTEM_PROMPT,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": f"Here are the articles for today:\n{context}"}
             ]
         )
-        return response.choices[0].message.content
+        return message.content[0].text
     except Exception as e:
         return f"System: Error generating script - {str(e)}"
