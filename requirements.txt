@@ -1,0 +1,9 @@
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.6.0
+sqlalchemy==2.0.25
+beautifulsoup4==4.12.3
+requests==2.31.0
+python-dotenv==1.0.1
+openai==1.10.0
+html2text==2024.2.26
