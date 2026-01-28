@@ -74,6 +74,29 @@ def ingest_article(request: URLRequest, db: Session = Depends(get_db)):
 def list_articles(db: Session = Depends(get_db)):
     return db.query(Article).filter(Article.status != "archived").all()
 
+@app.get("/podcasts", response_model=List[PodcastResponse])
+def list_podcasts(db: Session = Depends(get_db)):
+    return db.query(Podcast).order_by(Podcast.created_at.desc()).all()
+
+@app.delete("/articles/{article_id}")
+def delete_article(article_id: int, db: Session = Depends(get_db)):
+    article = db.query(Article).filter(Article.id == article_id).first()
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    db.delete(article)
+    db.commit()
+    return {"status": "deleted"}
+
+@app.delete("/podcasts/{podcast_id}")
+def delete_podcast(podcast_id: int, db: Session = Depends(get_db)):
+    podcast = db.query(Podcast).filter(Podcast.id == podcast_id).first()
+    if not podcast:
+        raise HTTPException(status_code=404, detail="Podcast not found")
+    # Optional: Delete actual file here
+    db.delete(podcast)
+    db.commit()
+    return {"status": "deleted"}
+
 @app.post("/generate", response_model=PodcastResponse)
 async def generate_episode(db: Session = Depends(get_db)):
     # 1. Fetch unprocessed articles

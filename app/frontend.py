@@ -37,37 +37,58 @@ with st.sidebar:
         st.metric("Articles in Queue", "Offline")
 
 # Main Content
-col1, col2 = st.columns([2, 1])
+tab1, tab2, tab3 = st.tabs(["📚 Reading Queue", "🎙️ Podcast Library", "🗄️ Archives"])
 
-with col1:
-    st.subheader("📰 Reading Queue")
+with tab1:
+    st.subheader("Pending Articles")
     if pending_count > 0:
         for art in articles:
-            with st.expander(f"{art['title']}", expanded=False):
-                st.markdown(f"**Source:** {art['url']}")
-                st.text(art['status'])
+            col_text, col_act = st.columns([4, 1])
+            with col_text:
+                st.markdown(f"**[{art['title']}]({art['url']})**")
+                st.caption(f"Source: {art['url'][:50]}...")
+            with col_act:
+                if st.button("🗑️", key=f"del_{art['id']}"):
+                    requests.delete(f"{API_URL}/articles/{art['id']}")
+                    st.rerun()
+        
+        st.divider()
+        if st.button("🎙️ Generate Podcast from Queue", type="primary"):
+            with st.spinner("Processing... Alex and Jamie are reading your articles..."):
+                try:
+                    res = requests.post(f"{API_URL}/generate")
+                    if res.status_code == 200:
+                        st.balloons()
+                        st.success("Episode ready! Check the Library tab.")
+                    else:
+                        st.error(f"Failed: {res.text}")
+                except Exception as e:
+                    st.error(str(e))
     else:
-        st.info("Queue is empty. Add some articles from the sidebar!")
+        st.info("Queue is empty. Add links via the sidebar!")
 
-with col2:
-    st.subheader("🎧 Generate Episode")
-    if st.button("🎙️ Create New Podcast", type="primary", disabled=(pending_count==0)):
-        with st.spinner("Reading articles, writing script, and recording audio..."):
-            try:
-                res = requests.post(f"{API_URL}/generate")
-                if res.status_code == 200:
-                    data = res.json()
-                    st.success("Episode Generated!")
-                    
-                    st.markdown(f"### {data['title']}")
-                    st.audio(data['audio_path']) # In MVP this is dummy audio
-                    
-                    with st.expander("View Script"):
-                        st.markdown(data['script'])
-                else:
-                    st.error(f"Generation failed: {res.text}")
-            except Exception as e:
-                st.error(f"Error: {e}")
+with tab2:
+    st.subheader("Your Episodes")
+    try:
+        podcasts = requests.get(f"{API_URL}/podcasts").json()
+        if podcasts:
+            for pod in podcasts:
+                with st.expander(f"🎧 {pod['title']}", expanded=False):
+                    st.audio(pod['audio_path'])
+                    st.caption("Script Preview:")
+                    st.text(pod['script'][:500] + "...")
+                    if st.button("Delete Episode", key=f"del_pod_{pod['id']}"):
+                        requests.delete(f"{API_URL}/podcasts/{pod['id']}")
+                        st.rerun()
+        else:
+            st.write("No podcasts yet.")
+    except Exception as e:
+        st.error("Could not load library.")
+
+with tab3:
+    st.subheader("All Articles")
+    # Placeholder for a full history view
+    st.write("History of all processed links will appear here.")
 
 st.divider()
 st.markdown("Powered by **FastAPI** & **Streamlit**")
